@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "680406863272",
+    "project_id": "intellect-arena-7d6de",
+    "storage_bucket": "intellect-arena-7d6de.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:680406863272:android:cdfd98a9536019a639a19d",
+        "android_client_info": {
+          "package_name": "com.intellect.arena.intellect_arena"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbGeTn1LHlW2phmlrPR0hpmCO4Qv_InOU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
