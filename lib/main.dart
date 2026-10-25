@@ -9,6 +9,7 @@ import 'language.dart';
 import 'services/auth_service.dart';
 import 'services/audio_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,7 +83,7 @@ class _ThemeProviderState extends State<_ThemeProvider> {
           ),
         ),
       ),
-      home: HomeScreen(onThemeToggle: _toggle, isDark: _isDark),
+      home: _Root(isDark: _isDark, onThemeToggle: _toggle),
     );
   }
 
@@ -124,4 +125,38 @@ class _ThemeProviderState extends State<_ThemeProvider> {
         ),
         const Color(0xFFF0F2FF),
       );
+}
+
+/// Аввал экрани оғозӣ, баъд экрани асосӣ (бо гузариши ҳамвор)
+class _Root extends StatefulWidget {
+  final bool isDark;
+  final ValueChanged<bool> onThemeToggle;
+  const _Root({required this.isDark, required this.onThemeToggle});
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  bool _splash = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 650),
+      switchInCurve: Curves.easeOut,
+      child: _splash
+          ? SplashScreen(
+              key: const ValueKey('splash'),
+              onDone: () {
+                if (mounted) setState(() => _splash = false);
+              },
+            )
+          : HomeScreen(
+              key: const ValueKey('home'),
+              onThemeToggle: widget.onThemeToggle,
+              isDark: widget.isDark,
+            ),
+    );
+  }
 }

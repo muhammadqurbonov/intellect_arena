@@ -15,6 +15,8 @@ import '../utils/helpers.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/app_button.dart';
 import '../widgets/countdown_timer.dart';
+import '../widgets/fx.dart';
+import '../widgets/answer_inputs.dart';
 import '../widgets/quiz_widgets.dart';
 import 'solo_result_screen.dart';
 
@@ -56,6 +58,12 @@ class _GameScreenState extends State<GameScreen> {
   final List<AnswerRecord> _records = [];
   Timer? _nextTimer;
   bool _finishing = false;
+  bool _intro = true;
+  int _goodFx = 0;
+  int _badFx = 0;
+  int _milestoneFx = 0;
+  String _fxEmoji = '✅';
+  String _milestoneText = '';
 
   bool get _survival => widget.config.mode == 'survival';
   QuestionModel get _current => _questions[_index];
@@ -93,50 +101,86 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   // ─── Ҷавоб ───────────────────────────────────────────────
-  void _onAnswer(int i) {
+  String _describe(QuestionModel q, dynamic answer) {
+    if (q.type == 'text') return answer as String;
+    if (q.type == 'match') {
+      final list = answer as List;
+      return [
+        for (var i = 0; i < q.pairs.length; i++)
+          '${q.pairs[i].left} → ${i < list.length && list[i] is int && list[i] < q.pairs.length ? q.pairs[list[i] as int].right : '—'}'
+      ].join('\n');
+    }
+    final idx = answer as int;
+    return (idx >= 0 && idx < q.options.length) ? q.options[idx] : '';
+  }
+
+  /// Ҷавоб: int (тест), String (пӯшида) ё List<int> (мувофиқат)
+  void _submit(dynamic answer) {
     if (_answered || _finishing) return;
     _timerCtrl.pause();
     final q = _current;
     final totalMs = widget.config.time * 1000;
     final left = _timerCtrl.remainingMs;
-    final correct = i == q.correctIndex;
-    int gain = 0;
+    final fraction = q.evaluate(answer);
+    final full = fraction >= 1.0;
 
-    if (correct) {
+    if (full) {
       _streak++;
       _bestStreak = max(_bestStreak, _streak);
       _correctCount++;
-      gain = AppHelpers.calculatePoints(
-        timeLeftMs: left,
-        totalSec: widget.config.time,
-        difficulty: q.difficulty,
-        streak: _streak,
-      );
-      _score += gain;
+      _goodFx++;
+      _fxEmoji = '✅';
+      if (const [3, 5, 7, 10, 15, 20].contains(_streak)) {
+        _milestoneFx++;
+        _milestoneText =
+            '🔥 ${Provider.of<AppLanguage>(context, listen: false).t('streak')} x$_streak';
+      }
       _audio.playCorrect();
       _audio.haptic(HapticKind.light);
     } else {
       _streak = 0;
-      if (_survival) _lives--;
+      _badFx++;
+      _fxEmoji = '❌';
+      if (_survival && fraction < 0.5) _lives--;
       _audio.playWrong();
       _audio.haptic(HapticKind.heavy);
     }
+    final gain = AppHelpers.calculatePointsFor(
+      fraction: fraction,
+      timeLeftMs: left,
+      totalSec: widget.config.time,
+      difficulty: q.difficulty,
+      streak: _streak,
+    );
+    _score += gain;
 
     _records.add(AnswerRecord(
-        question: q, selected: i, timeMs: max(0, totalMs - left)));
+      question: q,
+      selected: answer is int ? answer : 0,
+      timeMs: max(0, totalMs - left),
+      fraction: fraction,
+      given: _describe(q, answer),
+    ));
     setState(() {
-      _selected = i;
+      _selected = answer is int ? answer : null;
       _answered = true;
-      _feedback = correct ? 'correct' : 'wrong';
+      _feedback = full
+          ? 'correct'
+          : fraction > 0
+              ? 'partial'
+              : 'wrong';
       _lastGain = gain;
       if (gain > 0) _popId++;
     });
-    _scheduleNext();
+    // Ҷавоби дурустро хондан вақт мегирад
+    _scheduleNext(q.type == 'choice' || full ? 1800 : 3800);
   }
 
   void _onTimeUp() {
     if (_answered || _finishing) return;
     _streak = 0;
+    _badFx++;
+    _fxEmoji = '⏰';
     if (_survival) _lives--;
     _audio.playWrong();
     _audio.haptic(HapticKind.heavy);
@@ -150,12 +194,12 @@ class _GameScreenState extends State<GameScreen> {
       _feedback = 'time_up';
       _lastGain = 0;
     });
-    _scheduleNext();
+    _scheduleNext(_current.type == 'choice' ? 1800 : 3800);
   }
 
-  void _scheduleNext() {
+  void _scheduleNext([int ms = 1800]) {
     _nextTimer?.cancel();
-    _nextTimer = Timer(const Duration(milliseconds: 1800), _next);
+    _nextTimer = Timer(Duration(milliseconds: ms), _next);
   }
 
   void _next() {
@@ -178,7 +222,7 @@ class _GameScreenState extends State<GameScreen> {
 
   // ─── Кӯмакҳо ─────────────────────────────────────────────
   void _use5050() {
-    if (_answered || _used5050) return;
+    if (_answered || _used5050 || _current.type != 'choice') return;
     final wrong = [
       for (int i = 0; i < _current.options.length; i++)
         if (i != _current.correctIndex && !_eliminated.contains(i)) i
@@ -280,6 +324,43 @@ class _GameScreenState extends State<GameScreen> {
     return OptionState.dimmed;
   }
 
+  Widget _buildAnswerArea(QuestionModel q, AppLanguage lang) {
+    if (q.type == 'text') {
+      return TextAnswerInput(
+        key: ValueKey('txt-$_index'),
+        answers: q.answers,
+        locked: _answered,
+        hint: lang.t('type_here'),
+        submitLabel: lang.t('submit'),
+        correctLabel: lang.t('correct_answer'),
+        onSubmit: _submit,
+      );
+    }
+    if (q.type == 'match') {
+      return MatchAnswerInput(
+        key: ValueKey('mat-$_index'),
+        pairs: q.pairs,
+        locked: _answered,
+        submitLabel: lang.t('submit'),
+        onSubmit: _submit,
+      );
+    }
+    return Column(
+      children: [
+        for (int i = 0; i < q.options.length; i++)
+          OptionTile(
+            key: ValueKey('opt-$_index-$i'),
+            index: i,
+            text: q.options[i],
+            state: _optionState(i),
+            onTap: (_answered || _eliminated.contains(i))
+                ? null
+                : () => _submit(i),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lang = Provider.of<AppLanguage>(context);
@@ -314,6 +395,23 @@ class _GameScreenState extends State<GameScreen> {
       );
     }
 
+    if (_intro) {
+      return Scaffold(
+        body: AnimatedBackground(
+          child: Center(
+            child: StartCountdown(
+              readyText: lang.t('get_ready'),
+              goText: lang.t('go'),
+              onStep: () => _audio.haptic(HapticKind.light),
+              onDone: () {
+                if (mounted) setState(() => _intro = false);
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
     final q = _current;
     final progress = (_index + (_answered ? 1 : 0)) / _questions.length;
 
@@ -326,6 +424,14 @@ class _GameScreenState extends State<GameScreen> {
       },
       child: Scaffold(
         body: AnimatedBackground(
+          shake: _badFx,
+          overlay: FxLayer(
+            goodTrigger: _goodFx,
+            badTrigger: _badFx,
+            emoji: _fxEmoji,
+            milestoneTrigger: _milestoneFx,
+            milestoneText: _milestoneText,
+          ),
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
@@ -450,19 +556,15 @@ class _GameScreenState extends State<GameScreen> {
                               categoryLabel: lang.t('cat_${q.category}'),
                               difficulty: q.difficulty,
                               difficultyLabel: lang.t(q.difficulty),
+                              hint: q.type == 'text'
+                                  ? lang.t('hint_text')
+                                  : q.type == 'match'
+                                      ? lang.t('hint_match')
+                                      : null,
                             ),
                           ),
                           const SizedBox(height: 14),
-                          for (int i = 0; i < q.options.length; i++)
-                            OptionTile(
-                              key: ValueKey('opt-$_index-$i'),
-                              index: i,
-                              text: q.options[i],
-                              state: _optionState(i),
-                              onTap: (_answered || _eliminated.contains(i))
-                                  ? null
-                                  : () => _onAnswer(i),
-                            ),
+                          _buildAnswerArea(q, lang),
                         ],
                       ),
                     ),
@@ -486,7 +588,9 @@ class _GameScreenState extends State<GameScreen> {
                                       fontWeight: FontWeight.w800,
                                       color: _feedback == 'correct'
                                           ? AppColors.correct
-                                          : AppColors.wrong,
+                                          : _feedback == 'partial'
+                                              ? AppColors.warn
+                                              : AppColors.wrong,
                                     ),
                                   ),
                                 ),
@@ -504,7 +608,7 @@ class _GameScreenState extends State<GameScreen> {
                               LifelineButton(
                                 emoji: '✂️',
                                 label: '50/50',
-                                enabled: !_used5050,
+                                enabled: !_used5050 && q.type == 'choice',
                                 onTap: _use5050,
                               ),
                               LifelineButton(

@@ -12,7 +12,7 @@ class AppHelpers {
   /// Холи асосӣ: 100..1000 вобаста ба вақти боқимонда
   static int calculateScore(int timeLeftMs, int totalSec) {
     if (totalSec <= 0) return 100;
-    final ratio = (timeLeftMs / (totalSec * 1000)).clamp(0.0, 1.0);
+    final ratio = (timeLeftMs / (totalSec * 1000)).clamp(0.0, 1.0).toDouble();
     return (100 + 900 * ratio).round();
   }
 
@@ -44,6 +44,42 @@ class AppHelpers {
         streakBonus(streak);
   }
 
+  /// Холи савол бо назардошти қисман дурустӣ (барои "мувофиқат").
+  /// [streak] - серияи нав (0, агар ҷавоб пурра дуруст набошад).
+  static int calculatePointsFor({
+    required double fraction,
+    required int timeLeftMs,
+    required int totalSec,
+    required String difficulty,
+    required int streak,
+  }) {
+    if (fraction >= 1) {
+      return calculatePoints(
+        timeLeftMs: timeLeftMs,
+        totalSec: totalSec,
+        difficulty: difficulty,
+        streak: streak,
+      );
+    }
+    if (fraction <= 0) return 0;
+    final base =
+        calculateScore(timeLeftMs, totalSec) * difficultyMultiplier(difficulty);
+    return (base * fraction * 0.6).round();
+  }
+
+  static String typeEmoji(String t) {
+    switch (t) {
+      case 'choice':
+        return '🔘';
+      case 'text':
+        return '✍️';
+      case 'match':
+        return '🔗';
+      default:
+        return '🎲';
+    }
+  }
+
   // ─── Сатҳҳо ───────────────────────────────────────────────
   static int levelFor(int totalScore) =>
       sqrt(max(0, totalScore) / 5000).floor() + 1;
@@ -54,7 +90,7 @@ class AppHelpers {
     final lvl = levelFor(totalScore);
     final lo = scoreForLevel(lvl);
     final hi = scoreForLevel(lvl + 1);
-    return ((totalScore - lo) / (hi - lo)).clamp(0.0, 1.0);
+    return ((totalScore - lo) / (hi - lo)).clamp(0.0, 1.0).toDouble();
   }
 
   static String levelTitleKey(int level) => 'level_${min(level, 6)}';

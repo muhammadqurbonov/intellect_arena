@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AppLanguage extends ChangeNotifier {
   static const String _prefKey = 'language';
-  String _lang = 'tj';
+  String _lang = 'ru';
 
   String get lang => _lang;
 
@@ -13,7 +13,7 @@ class AppLanguage extends ChangeNotifier {
 
   Future<void> _loadLanguage() async {
     final prefs = await SharedPreferences.getInstance();
-    _lang = prefs.getString(_prefKey) ?? 'tj';
+    _lang = prefs.getString(_prefKey) ?? 'ru';
     notifyListeners();
   }
 
@@ -60,9 +60,9 @@ class AppLanguage extends ChangeNotifier {
 
     // Create Room
     'question_source': {'tj': 'Манбаи саволҳо', 'ru': 'Источник вопросов', 'en': 'Question Source'},
-    'from_json': {'tj': 'Аз JSON файл', 'ru': 'Из JSON файла', 'en': 'From JSON file'},
-    'from_admin': {'tj': 'Аз Панели Админ', 'ru': 'Из Панели Админа', 'en': 'From Admin Panel'},
-    'from_both': {'tj': 'Ҳарду', 'ru': 'Оба', 'en': 'Both'},
+    'from_json': {'tj': 'Саволҳои тайёр', 'ru': 'Готовые вопросы', 'en': 'Built-in questions'},
+    'from_admin': {'tj': 'Саволҳои ман', 'ru': 'Мои вопросы', 'en': 'My questions'},
+    'from_both': {'tj': 'Ҳама саволҳо', 'ru': 'Все вопросы', 'en': 'All questions'},
     'question_count': {'tj': 'Шумораи саволҳо', 'ru': 'Количество вопросов', 'en': 'Number of questions'},
     'time_per_question': {'tj': 'Вақт барои ҳар савол (сония)', 'ru': 'Время на вопрос (сек)', 'en': 'Time per question (sec)'},
     'start_game': {'tj': 'Бозиро оғоз кун', 'ru': 'Начать игру', 'en': 'Start Game'},
@@ -215,5 +215,35 @@ class AppLanguage extends ChangeNotifier {
     'reset_password_q': {'tj': 'Парол нав карда шавад?', 'ru': 'Сбросить пароль?', 'en': 'Reset password?'},
     'reset_password_text': {'tj': 'Пароли кӯҳна нест карда мешавад ва шумо пароли нав мегузоред. Саволҳои шумо нигоҳ дошта мешаванд.', 'ru': 'Старый пароль будет удалён, и вы зададите новый. Ваши вопросы сохранятся.', 'en': 'The old password will be removed and you will set a new one. Your questions are kept.'},
     'tap_correct': {'tj': 'Ҷавоби дурустро бо доира ишора кунед', 'ru': 'Отметьте верный ответ кружком', 'en': 'Tap the circle to mark the correct answer'},
+
+    // ─── Намудҳои савол (v3) ───
+    'q_type': {'tj': 'Намуди савол', 'ru': 'Тип вопросов', 'en': 'Question type'},
+    'type_all': {'tj': 'Омехта', 'ru': 'Смешанные', 'en': 'Mixed'},
+    'type_choice': {'tj': 'Тест', 'ru': 'Тест', 'en': 'Test'},
+    'type_text': {'tj': 'Пӯшида', 'ru': 'Впиши ответ', 'en': 'Type answer'},
+    'type_match': {'tj': 'Мувофиқат', 'ru': 'Соответствие', 'en': 'Matching'},
+    'type_choice_d': {'tj': 'Аз чанд вариант як ҷавобро интихоб кунед', 'ru': 'Выберите один ответ из вариантов', 'en': 'Pick one answer from the options'},
+    'type_text_d': {'tj': 'Ҷавобро худатон менависед', 'ru': 'Ответ нужно написать самому', 'en': 'You type the answer yourself'},
+    'type_match_d': {'tj': 'Ҷуфтҳоро ба ҳам мувофиқ кунед', 'ru': 'Сопоставьте пары', 'en': 'Match the pairs'},
+    'hint_text': {'tj': 'Ҷавобро нависед', 'ru': 'Впишите ответ', 'en': 'Type your answer'},
+    'hint_match': {'tj': 'Ҳар ҷузъро бо ҷавоби худ мувофиқ кунед', 'ru': 'Сопоставьте каждый элемент с ответом', 'en': 'Match each item with its answer'},
+    'type_here': {'tj': 'Ҷавоби худро нависед...', 'ru': 'Введите ответ...', 'en': 'Type your answer...'},
+    'submit': {'tj': 'Ҷавоб додан', 'ru': 'Ответить', 'en': 'Answer'},
+    'partial': {'tj': 'Қисман дуруст', 'ru': 'Частично верно', 'en': 'Partly correct'},
+    'source_hint': {'tj': 'Саволҳои тайёр дар худи барнома ҳастанд. Саволҳои ман: онҳое, ки шумо дар Панели Админ илова кардаед.', 'ru': 'Готовые вопросы встроены в приложение. Мои вопросы: те, что вы добавили в Панели Админа.', 'en': 'Built-in questions come with the app. My questions are the ones you added in the Admin Panel.'},
+    'alt_answers': {'tj': 'Ҷавобҳои дигари қобили қабул', 'ru': 'Другие допустимые ответы', 'en': 'Other accepted answers'},
+    'alt_answers_hint': {'tj': 'Бо вергул ҷудо кунед. Масалан: Мекка, Макка', 'ru': 'Через запятую. Например: Мекка, Макка', 'en': 'Separate with commas. E.g. Mecca, Makkah'},
+    'left_item': {'tj': 'Чап', 'ru': 'Левая часть', 'en': 'Left'},
+    'right_item': {'tj': 'Рост', 'ru': 'Правая часть', 'en': 'Right'},
+    'add_pair': {'tj': 'Ҷуфт илова кун', 'ru': 'Добавить пару', 'en': 'Add pair'},
+    'pairs_label': {'tj': 'Ҷуфтҳо (аз 3 то 5)', 'ru': 'Пары (от 3 до 5)', 'en': 'Pairs (3 to 5)'},
+    'pairs_unique': {'tj': 'Тарафҳои рост бояд гуногун бошанд', 'ru': 'Правые части должны быть разными', 'en': 'Right items must be different'},
+    'min_pairs': {'tj': 'Камаш 3 ҷуфт лозим аст', 'ru': 'Нужно минимум 3 пары', 'en': 'At least 3 pairs are required'},
+
+    // ─── Аниматсияҳо (v4) ───
+    'get_ready': {'tj': 'Омода шавед!', 'ru': 'Приготовьтесь!', 'en': 'Get ready!'},
+    'go': {'tj': 'Шурӯъ!', 'ru': 'Вперёд!', 'en': 'Go!'},
+    'streak': {'tj': 'Серия', 'ru': 'Серия', 'en': 'Streak'},
+    'splash_tagline': {'tj': 'Донишро санҷед ва рақобат кунед!', 'ru': 'Проверь знания и соревнуйся!', 'en': 'Test your knowledge and compete!'},
   };
 }

@@ -88,7 +88,7 @@ class _ConfettiPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final p in pieces) {
-      final prog = ((t - p.delay) / (1 - p.delay)).clamp(0.0, 1.0);
+      final prog = ((t - p.delay) / (1 - p.delay)).clamp(0.0, 1.0).toDouble();
       if (prog <= 0) continue;
       final y = -20 + prog * (size.height + 60) * p.speed;
       final x = size.width * p.x + sin(prog * pi * 4) * size.width * p.sway;

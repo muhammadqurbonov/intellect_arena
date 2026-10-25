@@ -8,6 +8,8 @@ import '../utils/constants.dart';
 import '../utils/helpers.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/app_button.dart';
+import '../widgets/confetti.dart';
+import '../widgets/fx.dart';
 import '../widgets/name_gate.dart';
 import '../widgets/reveal.dart';
 import 'admin_screen.dart';
@@ -34,6 +36,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _auth = AuthService();
   Map<String, dynamic> _stats = {};
+  int _confettiId = 0;
 
   @override
   void initState() {
@@ -70,6 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: AnimatedBackground(
+        overlay: _confettiId > 0
+            ? Confetti(key: ValueKey(_confettiId), count: 80)
+            : null,
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
@@ -152,7 +158,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 18),
 
                 // ── Трофей ──
-                const Reveal(delayMs: 180, child: _FloatingTrophy()),
+                Reveal(
+                  delayMs: 180,
+                  child: _FloatingTrophy(
+                    onTap: () => setState(() => _confettiId++),
+                  ),
+                ),
                 const SizedBox(height: 20),
 
                 // ── Меню ──
@@ -301,7 +312,8 @@ class _LevelCard extends StatelessWidget {
 
 // ─── Трофеи шиновар ──────────────────────────────────────────
 class _FloatingTrophy extends StatefulWidget {
-  const _FloatingTrophy();
+  final VoidCallback onTap;
+  const _FloatingTrophy({required this.onTap});
 
   @override
   State<_FloatingTrophy> createState() => _FloatingTrophyState();
@@ -330,7 +342,10 @@ class _FloatingTrophyState extends State<_FloatingTrophy>
       animation: _c,
       builder: (_, __) {
         final t = Curves.easeInOut.transform(_c.value);
-        return Transform.translate(
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: Transform.translate(
           offset: Offset(0, -8 * t),
           child: Container(
             height: 104,
@@ -349,7 +364,7 @@ class _FloatingTrophyState extends State<_FloatingTrophy>
             child:
                 const Icon(Icons.emoji_events_rounded, size: 56, color: Colors.white),
           ),
-        );
+        ));
       },
     );
   }
@@ -377,7 +392,10 @@ class _MenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return PressableScale(
       onTap: onTap,
-      child: Container(
+      child: ShimmerSweep(
+        enabled: big,
+        radius: BorderRadius.circular(20),
+        child: Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(vertical: big ? 18 : 16, horizontal: 18),
         decoration: BoxDecoration(
@@ -428,7 +446,7 @@ class _MenuCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

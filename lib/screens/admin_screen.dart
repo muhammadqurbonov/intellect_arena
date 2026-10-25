@@ -7,6 +7,7 @@ import '../services/firestore_service.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
 import '../widgets/app_button.dart';
+import '../widgets/quiz_widgets.dart';
 import '../widgets/reveal.dart';
 
 class AdminScreen extends StatelessWidget {
@@ -144,6 +145,17 @@ class _QuestionCard extends StatelessWidget {
     if (ok == true) await db.deleteAdminQuestion(docId);
   }
 
+  Widget _chip(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+      );
+
   @override
   Widget build(BuildContext context) {
     final diffColor = AppHelpers.difficultyColor(q.difficulty);
@@ -160,23 +172,22 @@ class _QuestionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: diffColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _chip('${AppHelpers.typeEmoji(q.type)} ${lang.t('type_${q.type}')}',
+                        AppColors.primary),
+                    _chip(lang.t(q.difficulty), diffColor),
+                    Text(
+                        '${AppHelpers.categoryEmoji(q.category)} ${lang.t('cat_${q.category}')}',
+                        style:
+                            const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
                 ),
-                child: Text(lang.t(q.difficulty),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: diffColor,
-                        fontWeight: FontWeight.bold)),
               ),
-              const SizedBox(width: 8),
-              Text('${AppHelpers.categoryEmoji(q.category)} ${lang.t('cat_${q.category}')}',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              const Spacer(),
               IconButton(
                   icon: const Icon(Icons.edit, size: 18), onPressed: onEdit),
               IconButton(
@@ -188,24 +199,53 @@ class _QuestionCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(q.question, style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          for (int i = 0; i < q.options.length; i++)
+          if (q.type == 'choice')
+            for (int i = 0; i < q.options.length; i++)
+              Row(
+                children: [
+                  Icon(
+                    i == q.correctIndex
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                    size: 16,
+                    color: i == q.correctIndex ? AppColors.correct : Colors.grey,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(q.options[i],
+                        style: TextStyle(
+                            color:
+                                i == q.correctIndex ? AppColors.correct : null)),
+                  ),
+                ],
+              ),
+          if (q.type == 'text')
             Row(
               children: [
-                Icon(
-                  i == q.correctIndex
-                      ? Icons.check_circle
-                      : Icons.circle_outlined,
-                  size: 16,
-                  color: i == q.correctIndex ? AppColors.correct : Colors.grey,
-                ),
+                const Icon(Icons.check_circle,
+                    size: 16, color: AppColors.correct),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(q.options[i],
-                      style: TextStyle(
-                          color: i == q.correctIndex ? AppColors.correct : null)),
+                  child: Text(q.answers.join('  •  '),
+                      style: const TextStyle(color: AppColors.correct)),
                 ),
               ],
             ),
+          if (q.type == 'match')
+            for (final p in q.pairs)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  children: [
+                    const Icon(Icons.link, size: 16, color: AppColors.correct),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('${p.left}  →  ${p.right}',
+                          style: const TextStyle(color: AppColors.correct)),
+                    ),
+                  ],
+                ),
+              ),
         ],
       ),
     );
@@ -230,21 +270,46 @@ class _QuestionForm extends StatefulWidget {
 class _QuestionFormState extends State<_QuestionForm> {
   late final TextEditingController _qCtrl;
   late final List<TextEditingController> _opts;
+  late final TextEditingController _answerCtrl;
+  late final TextEditingController _altCtrl;
+  final List<TextEditingController> _lefts = [];
+  final List<TextEditingController> _rights = [];
   late int _correctIndex;
   late String _category;
   late String _difficulty;
+  late String _type;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
+    _type = e?.type ?? 'choice';
     _qCtrl = TextEditingController(text: e?.question ?? '');
     _opts = List.generate(
       4,
       (i) => TextEditingController(
-          text: (e != null && e.options.length > i) ? e.options[i] : ''),
+          text: (e != null && e.type == 'choice' && e.options.length > i)
+              ? e.options[i]
+              : ''),
     );
+    _answerCtrl = TextEditingController(
+        text: (e != null && e.answers.isNotEmpty) ? e.answers.first : '');
+    _altCtrl = TextEditingController(
+        text: (e != null && e.answers.length > 1)
+            ? e.answers.skip(1).join(', ')
+            : '');
+    if (e != null && e.type == 'match' && e.pairs.isNotEmpty) {
+      for (final p in e.pairs) {
+        _lefts.add(TextEditingController(text: p.left));
+        _rights.add(TextEditingController(text: p.right));
+      }
+    } else {
+      for (var i = 0; i < 4; i++) {
+        _lefts.add(TextEditingController());
+        _rights.add(TextEditingController());
+      }
+    }
     _correctIndex = e?.correctIndex ?? 0;
     _category = AppConstants.categories.contains(e?.category)
         ? e!.category
@@ -255,30 +320,101 @@ class _QuestionFormState extends State<_QuestionForm> {
   @override
   void dispose() {
     _qCtrl.dispose();
-    for (final c in _opts) {
+    _answerCtrl.dispose();
+    _altCtrl.dispose();
+    for (final c in [..._opts, ..._lefts, ..._rights]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final lang = widget.lang;
-    if (_qCtrl.text.trim().isEmpty || _opts.any((c) => c.text.trim().isEmpty)) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(lang.t('field_required'))));
-      return;
-    }
-    setState(() => _saving = true);
+  void _snack(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
 
-    final q = QuestionModel(
-      id: widget.existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      question: _qCtrl.text.trim(),
+  QuestionModel? _build() {
+    final lang = widget.lang;
+    final question = _qCtrl.text.trim();
+    if (question.isEmpty) {
+      _snack(lang.t('field_required'));
+      return null;
+    }
+    final id =
+        widget.existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+    if (_type == 'text') {
+      final main = _answerCtrl.text.trim();
+      if (main.isEmpty) {
+        _snack(lang.t('field_required'));
+        return null;
+      }
+      final alts = _altCtrl.text
+          .split(RegExp(r'[,;\n]'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty && e != main);
+      return QuestionModel(
+        id: id,
+        question: question,
+        options: const [],
+        correctIndex: 0,
+        category: _category,
+        difficulty: _difficulty,
+        type: 'text',
+        answers: [main, ...alts],
+      );
+    }
+
+    if (_type == 'match') {
+      final pairs = <MatchPair>[];
+      for (var i = 0; i < _lefts.length; i++) {
+        final l = _lefts[i].text.trim();
+        final r = _rights[i].text.trim();
+        if (l.isEmpty || r.isEmpty) {
+          _snack(lang.t('field_required'));
+          return null;
+        }
+        pairs.add(MatchPair(l, r));
+      }
+      if (pairs.length < 3) {
+        _snack(lang.t('min_pairs'));
+        return null;
+      }
+      if (pairs.map((p) => p.right.toLowerCase()).toSet().length !=
+          pairs.length) {
+        _snack(lang.t('pairs_unique'));
+        return null;
+      }
+      return QuestionModel(
+        id: id,
+        question: question,
+        options: const [],
+        correctIndex: 0,
+        category: _category,
+        difficulty: _difficulty,
+        type: 'match',
+        pairs: pairs,
+      );
+    }
+
+    if (_opts.any((c) => c.text.trim().isEmpty)) {
+      _snack(lang.t('field_required'));
+      return null;
+    }
+    return QuestionModel(
+      id: id,
+      question: question,
       options: _opts.map((c) => c.text.trim()).toList(),
       correctIndex: _correctIndex,
       category: _category,
       difficulty: _difficulty,
     );
+  }
 
+  Future<void> _save() async {
+    final lang = widget.lang;
+    final q = _build();
+    if (q == null) return;
+    setState(() => _saving = true);
     try {
       if (widget.docId != null) {
         await widget.db.updateAdminQuestion(widget.docId!, q);
@@ -289,9 +425,142 @@ class _QuestionFormState extends State<_QuestionForm> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('${lang.t('error')}: $e')));
+      _snack('${lang.t('error')}: $e');
     }
+  }
+
+  InputDecoration _dec(String label, {bool dense = false}) => InputDecoration(
+        labelText: label,
+        isDense: dense,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      );
+
+  Widget _choiceFields(AppLanguage lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(lang.t('answer_options'),
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(lang.t('tap_correct'),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        const SizedBox(height: 8),
+        for (int i = 0; i < 4; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => setState(() => _correctIndex = i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _correctIndex == i
+                            ? AppColors.correct
+                            : Colors.grey,
+                        width: 2,
+                      ),
+                      color: _correctIndex == i
+                          ? AppColors.correct.withValues(alpha: 0.2)
+                          : Colors.transparent,
+                    ),
+                    child: _correctIndex == i
+                        ? const Icon(Icons.check,
+                            size: 15, color: AppColors.correct)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _opts[i],
+                    decoration: _dec(String.fromCharCode(65 + i), dense: true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _textFields(AppLanguage lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _answerCtrl,
+          decoration: _dec(lang.t('correct_answer')),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _altCtrl,
+          maxLines: 2,
+          decoration: _dec(lang.t('alt_answers')),
+        ),
+        const SizedBox(height: 6),
+        Text(lang.t('alt_answers_hint'),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+      ],
+    );
+  }
+
+  Widget _matchFields(AppLanguage lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(lang.t('pairs_label'),
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        for (var i = 0; i < _lefts.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _lefts[i],
+                    decoration: _dec('${lang.t('left_item')} ${i + 1}', dense: true),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(Icons.arrow_forward_rounded, size: 16),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _rights[i],
+                    decoration:
+                        _dec('${lang.t('right_item')} ${i + 1}', dense: true),
+                  ),
+                ),
+                if (_lefts.length > 3)
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline,
+                        size: 20, color: Colors.redAccent),
+                    onPressed: () => setState(() {
+                      _lefts.removeAt(i).dispose();
+                      _rights.removeAt(i).dispose();
+                    }),
+                  ),
+              ],
+            ),
+          ),
+        if (_lefts.length < 5)
+          TextButton.icon(
+            onPressed: () => setState(() {
+              _lefts.add(TextEditingController());
+              _rights.add(TextEditingController());
+            }),
+            icon: const Icon(Icons.add),
+            label: Text(lang.t('add_pair')),
+          ),
+      ],
+    );
   }
 
   @override
@@ -321,80 +590,43 @@ class _QuestionFormState extends State<_QuestionForm> {
               widget.existing != null ? lang.t('edit') : lang.t('add_question'),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+            Text(lang.t('q_type'),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final t in ['choice', 'text', 'match'])
+                  SelectChip(
+                    label: '${AppHelpers.typeEmoji(t)} ${lang.t('type_$t')}',
+                    selected: _type == t,
+                    onTap: () => setState(() => _type = t),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(lang.t('type_${_type}_d'),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+            const SizedBox(height: 14),
             TextField(
               controller: _qCtrl,
               maxLines: 3,
-              decoration: InputDecoration(
-                labelText: lang.t('question_text'),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              decoration: _dec(lang.t('question_text')),
             ),
             const SizedBox(height: 16),
-            Text(lang.t('answer_options'),
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(lang.t('tap_correct'),
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-            const SizedBox(height: 8),
-            for (int i = 0; i < 4; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => setState(() => _correctIndex = i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _correctIndex == i
-                                ? AppColors.correct
-                                : Colors.grey,
-                            width: 2,
-                          ),
-                          color: _correctIndex == i
-                              ? AppColors.correct.withValues(alpha: 0.2)
-                              : Colors.transparent,
-                        ),
-                        child: _correctIndex == i
-                            ? const Icon(Icons.check,
-                                size: 15, color: AppColors.correct)
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _opts[i],
-                        decoration: InputDecoration(
-                          labelText: String.fromCharCode(65 + i),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 8),
+            if (_type == 'choice') _choiceFields(lang),
+            if (_type == 'text') _textFields(lang),
+            if (_type == 'match') _matchFields(lang),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _category,
                     isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: lang.t('category'),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      isDense: true,
-                    ),
+                    decoration: _dec(lang.t('category'), dense: true),
                     items: AppConstants.categories
                         .map((c) => DropdownMenuItem(
                             value: c,
@@ -412,12 +644,7 @@ class _QuestionFormState extends State<_QuestionForm> {
                   child: DropdownButtonFormField<String>(
                     initialValue: _difficulty,
                     isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: lang.t('difficulty'),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      isDense: true,
-                    ),
+                    decoration: _dec(lang.t('difficulty'), dense: true),
                     items: AppConstants.difficulties
                         .map((d) =>
                             DropdownMenuItem(value: d, child: Text(lang.t(d))))

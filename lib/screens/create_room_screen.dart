@@ -24,6 +24,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   String _source = 'json';
   String _category = 'all';
   String _difficulty = 'all';
+  String _type = 'all';
   int _questionCount = 10;
   int _timePerQuestion = AppConstants.defaultTimePerQuestion;
   bool _creating = false;
@@ -43,6 +44,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
         timePerQuestion: _timePerQuestion,
         category: _category,
         difficulty: _difficulty,
+        type: _type,
       );
       if (mounted) {
         Navigator.pushReplacement(
@@ -97,6 +99,21 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                               label: lang.t('from_both'),
                               selected: _source == 'both',
                               onTap: () => setState(() => _source = 'both')),
+                        ]),
+                        const SizedBox(height: 8),
+                        Text(lang.t('source_hint'),
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade500)),
+                        const SizedBox(height: 22),
+                        _label(lang.t('q_type')),
+                        Wrap(spacing: 8, runSpacing: 8, children: [
+                          for (final t in ['all', 'choice', 'text', 'match'])
+                            SelectChip(
+                              label:
+                                  '${AppHelpers.typeEmoji(t)} ${lang.t('type_$t')}',
+                              selected: _type == t,
+                              onTap: () => setState(() => _type = t),
+                            ),
                         ]),
                         const SizedBox(height: 22),
                         _label(lang.t('category')),

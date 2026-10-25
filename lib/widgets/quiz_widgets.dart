@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
 import 'app_button.dart';
+import 'fx.dart';
 
 // ═══════════════════════════ OPTION TILE ═══════════════════════════
 
@@ -181,6 +182,7 @@ class QuestionCard extends StatelessWidget {
   final String categoryLabel;
   final String difficulty;
   final String difficultyLabel;
+  final String? hint;
 
   const QuestionCard({
     super.key,
@@ -189,6 +191,7 @@ class QuestionCard extends StatelessWidget {
     required this.categoryLabel,
     required this.difficulty,
     required this.difficultyLabel,
+    this.hint,
   });
 
   @override
@@ -232,6 +235,19 @@ class QuestionCard extends StatelessWidget {
               height: 1.3,
             ),
           ),
+          if (hint != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                hint!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -274,7 +290,10 @@ class StreakBadge extends StatelessWidget {
       transitionBuilder: (child, anim) =>
           ScaleTransition(scale: anim, child: child),
       child: streak >= 2
-          ? Container(
+          ? Pulse(
+              key: ValueKey('p$streak'),
+              amount: streak >= 5 ? 0.14 : 0.08,
+              child: Container(
               key: ValueKey(streak),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -291,7 +310,7 @@ class StreakBadge extends StatelessWidget {
                   fontSize: 14,
                 ),
               ),
-            )
+            ))
           : const SizedBox(key: ValueKey('none'), width: 1, height: 30),
     );
   }
@@ -361,7 +380,7 @@ class PointsPop extends StatelessWidget {
       duration: const Duration(milliseconds: 1300),
       curve: Curves.easeOut,
       builder: (_, t, child) => Opacity(
-        opacity: (1 - t * t).clamp(0.0, 1.0),
+        opacity: (1 - t * t).clamp(0.0, 1.0).toDouble(),
         child: Transform.translate(
           offset: Offset(0, -46 * t),
           child: Transform.scale(scale: 0.85 + 0.35 * sin(min(t * 3, 1) * pi / 2), child: child),

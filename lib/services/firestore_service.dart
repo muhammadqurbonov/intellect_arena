@@ -54,6 +54,7 @@ class FirestoreService {
     required String uid,
     String category = 'all',
     String difficulty = 'all',
+    String type = 'all',
   }) async {
     var all = <QuestionModel>[];
     if (source == 'json' || source == 'both') {
@@ -62,15 +63,51 @@ class FirestoreService {
     if (source == 'admin' || source == 'both') {
       all.addAll(await loadAdminQuestions(uid));
     }
+    all = all.where((q) => q.isValid).toList();
+    if (type != 'all') {
+      all = all.where((q) => q.type == type).toList();
+    }
     if (category != 'all') {
       all = all.where((q) => q.category == category).toList();
     }
     if (difficulty != 'all') {
       all = all.where((q) => q.difficulty == difficulty).toList();
     }
-    all.shuffle();
-    if (all.length > count) all = all.sublist(0, count);
+    if (type == 'all') {
+      // Режими "Омехта": аз ҳар се намуд баробар гирифта мешавад
+      all = _pickBalanced(all, count);
+    } else {
+      all.shuffle();
+      if (all.length > count) all = all.sublist(0, count);
+    }
     return all.map((q) => q.shuffled()).toList();
+  }
+
+  /// Аз тест, пӯшида ва мувофиқат баробар (фарқ на зиёда аз 1) интихоб мекунад.
+  /// Агар як гурӯҳ кам шавад, ҷои онро гурӯҳҳои дигар мегиранд.
+  List<QuestionModel> _pickBalanced(List<QuestionModel> all, int count) {
+    final pools = <String, List<QuestionModel>>{
+      'choice': [],
+      'text': [],
+      'match': [],
+    };
+    for (final q in all) {
+      pools[q.type]?.add(q);
+    }
+    for (final p in pools.values) {
+      p.shuffle();
+    }
+    final types = pools.keys.where((k) => pools[k]!.isNotEmpty).toList()
+      ..shuffle();
+    final result = <QuestionModel>[];
+    var round = 0;
+    while (result.length < count && types.any((t) => pools[t]!.isNotEmpty)) {
+      final t = types[round % types.length];
+      if (pools[t]!.isNotEmpty) result.add(pools[t]!.removeLast());
+      round++;
+    }
+    result.shuffle();
+    return result;
   }
 
   Future<void> addAdminQuestion(QuestionModel q) async {
@@ -115,6 +152,7 @@ class FirestoreService {
         'bestStreak': 0,
         'correct': 0,
         'lastGain': 0,
+        'result': 'none',
       };
 
   Future<String> createRoom({
@@ -123,6 +161,7 @@ class FirestoreService {
     required int timePerQuestion,
     String category = 'all',
     String difficulty = 'all',
+    String type = 'all',
   }) async {
     final uid = _auth.uid;
     final name = await _resolveName(uid);
@@ -133,6 +172,7 @@ class FirestoreService {
       uid: uid,
       category: category,
       difficulty: difficulty,
+      type: type,
     );
     if (questions.isEmpty) throw Exception('no_questions');
 
@@ -157,6 +197,7 @@ class FirestoreService {
       'questionSource': questionSource,
       'category': category,
       'difficulty': difficulty,
+      'questionType': type,
       'questionCount': questions.length,
       'timePerQuestion': timePerQuestion,
       'questions': questions.map((q) => q.toJson()).toList(),
@@ -263,6 +304,7 @@ class FirestoreService {
         updates['players.$k.bestStreak'] = 0;
         updates['players.$k.correct'] = 0;
         updates['players.$k.lastGain'] = 0;
+        updates['players.$k.result'] = 'none';
         updates['players.$k.answered'] = false;
         updates['players.$k.answerIndex'] = -1;
         updates['players.$k.answerTimeMs'] = 0;
@@ -274,11 +316,13 @@ class FirestoreService {
   // ═══════════════ ҶАВОБ ВА ГУЗАРИШ БА САВОЛИ НАВБАТӣ ═══════════════
 
   /// Ҷавобро дар як транзаксия қабул мекунад ва холро ҳисоб мекунад.
-  /// Такрорӣ ё дер ҷавоб додан рад мешавад. Холи бадастомада бармегардад.
+  /// [answer]: int (тест), String (пӯшида), List<int> (мувофиқат)
+  /// ё null (вақт тамом шуд).
+  /// Ҷавоби такрорӣ ё дер рад мешавад. Холи бадастомада бармегардад.
   Future<int> submitAnswer({
     required String roomId,
     required int expectedIndex,
-    required int answerIndex,
+    required dynamic answer,
     required int timeLeftMs,
   }) async {
     final uid = _auth.uid;
@@ -306,30 +350,39 @@ class FirestoreService {
             Map<String, dynamic>.from(questions[expectedIndex] as Map));
 
         final total = (data['timePerQuestion'] as num?)?.toInt() ?? 20;
-        final left = timeLeftMs.clamp(0, total * 1000);
-        final correct = answerIndex == q.correctIndex;
+        final left = timeLeftMs.clamp(0, total * 1000).toInt();
+        final fraction = answer == null ? 0.0 : q.evaluate(answer);
+        final full = fraction >= 1.0;
         final oldStreak = (me['streak'] as num?)?.toInt() ?? 0;
-        final streak = correct ? oldStreak + 1 : 0;
-        final points = correct
-            ? AppHelpers.calculatePoints(
-                timeLeftMs: left,
-                totalSec: total,
-                difficulty: q.difficulty,
-                streak: streak,
-              )
-            : 0;
+        final streak = full ? oldStreak + 1 : 0;
+        final points = AppHelpers.calculatePointsFor(
+          fraction: fraction,
+          timeLeftMs: left,
+          totalSec: total,
+          difficulty: q.difficulty,
+          streak: streak,
+        );
+        final result = answer == null
+            ? 'none'
+            : full
+                ? 'correct'
+                : fraction > 0
+                    ? 'partial'
+                    : 'wrong';
 
         tx.update(ref, {
           'players.$uid.answered': true,
-          'players.$uid.answerIndex': answerIndex,
+          'players.$uid.answerIndex':
+              answer is int ? answer : (answer == null ? -1 : 0),
           'players.$uid.answerTimeMs': left,
           'players.$uid.lastGain': points,
+          'players.$uid.result': result,
           'players.$uid.streak': streak,
           'players.$uid.bestStreak':
               max(streak, (me['bestStreak'] as num?)?.toInt() ?? 0),
           'players.$uid.score': ((me['score'] as num?)?.toInt() ?? 0) + points,
           'players.$uid.correct':
-              ((me['correct'] as num?)?.toInt() ?? 0) + (correct ? 1 : 0),
+              ((me['correct'] as num?)?.toInt() ?? 0) + (full ? 1 : 0),
         });
         return points;
       });
@@ -371,6 +424,7 @@ class FirestoreService {
               updates['players.$k.answered'] = true;
               updates['players.$k.answerIndex'] = -1;
               updates['players.$k.lastGain'] = 0;
+              updates['players.$k.result'] = 'none';
               updates['players.$k.streak'] = 0;
             }
           });
@@ -387,6 +441,7 @@ class FirestoreService {
               updates['players.$k.answerIndex'] = -1;
               updates['players.$k.answerTimeMs'] = 0;
               updates['players.$k.lastGain'] = 0;
+              updates['players.$k.result'] = 'none';
             }
           }
         }

@@ -22,6 +22,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
   String _mode = 'classic';
   String _category = 'all';
   String _difficulty = 'all';
+  String _type = 'all';
   String _source = 'json';
   int _count = 10;
   int _time = AppConstants.defaultTimePerQuestion;
@@ -34,6 +35,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
           mode: _mode,
           category: _category,
           difficulty: _difficulty,
+          type: _type,
           count: _count,
           time: _time,
           source: _source,
@@ -124,6 +126,23 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                         80,
                       ),
                       _section(
+                        lang.t('q_type'),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final t in ['all', 'choice', 'text', 'match'])
+                              SelectChip(
+                                label:
+                                    '${AppHelpers.typeEmoji(t)} ${lang.t('type_$t')}',
+                                selected: _type == t,
+                                onTap: () => setState(() => _type = t),
+                              ),
+                          ],
+                        ),
+                        110,
+                      ),
+                      _section(
                         lang.t('difficulty'),
                         Wrap(
                           spacing: 8,
@@ -178,10 +197,9 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                       ),
                       _section(
                         lang.t('question_source'),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
+                        _SourceBlock(
+                          hint: lang.t('source_hint'),
+                          chips: [
                             SelectChip(
                               label: lang.t('from_json'),
                               selected: _source == 'json',
@@ -272,6 +290,26 @@ class _ModeCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Интихоби манбаи саволҳо бо шарҳи кӯтоҳ
+class _SourceBlock extends StatelessWidget {
+  final String hint;
+  final List<Widget> chips;
+  const _SourceBlock({required this.hint, required this.chips});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(spacing: 8, runSpacing: 8, children: chips),
+        const SizedBox(height: 8),
+        Text(hint,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+      ],
     );
   }
 }

@@ -291,9 +291,7 @@ class _MistakeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final q = record.question;
-    final mine = record.selected >= 0 && record.selected < q.options.length
-        ? q.options[record.selected]
-        : lang.t('time_up');
+    final mine = record.given ?? lang.t('time_up');
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
@@ -323,7 +321,7 @@ class _MistakeCard extends StatelessWidget {
                 size: 18, color: AppColors.correct),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(q.options[q.correctIndex],
+                child: Text(q.correctAnswerText,
                     style: const TextStyle(
                         color: AppColors.correct,
                         fontWeight: FontWeight.w700))),

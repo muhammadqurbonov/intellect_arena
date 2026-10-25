@@ -1,5 +1,18 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/answer_check.dart';
+
+/// Як ҷуфт барои саволи "мувофиқат"
+class MatchPair {
+  final String left;
+  final String right;
+  const MatchPair(this.left, this.right);
+
+  factory MatchPair.fromJson(Map<String, dynamic> j) =>
+      MatchPair(j['left']?.toString() ?? '', j['right']?.toString() ?? '');
+
+  Map<String, dynamic> toJson() => {'left': left, 'right': right};
+}
 
 class QuestionModel {
   final String id;
@@ -9,6 +22,15 @@ class QuestionModel {
   final String category;
   final String difficulty;
 
+  /// choice (тест) | text (пӯшида, ҷавобро менависанд) | match (мувофиқат)
+  final String type;
+
+  /// Ҷавобҳои қобили қабул (барои type == text). Аввалӣ - асосӣ.
+  final List<String> answers;
+
+  /// Ҷуфтҳо (барои type == match)
+  final List<MatchPair> pairs;
+
   QuestionModel({
     required this.id,
     required this.question,
@@ -16,9 +38,13 @@ class QuestionModel {
     required this.correctIndex,
     required this.category,
     required this.difficulty,
+    this.type = 'choice',
+    this.answers = const [],
+    this.pairs = const [],
   });
 
   factory QuestionModel.fromJson(Map<String, dynamic> json) {
+    final t = json['type']?.toString() ?? 'choice';
     return QuestionModel(
       id: json['id']?.toString() ?? '',
       question: json['question']?.toString() ?? '',
@@ -30,6 +56,13 @@ class QuestionModel {
       // Файли кӯҳна "level" дорад, нав "difficulty"
       difficulty:
           (json['difficulty'] ?? json['level'])?.toString() ?? 'easy',
+      type: (t == 'text' || t == 'match') ? t : 'choice',
+      answers: (json['answers'] as List? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      pairs: (json['pairs'] as List? ?? [])
+          .map((e) => MatchPair.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
     );
   }
 
@@ -40,10 +73,63 @@ class QuestionModel {
         'correctIndex': correctIndex,
         'category': category,
         'difficulty': difficulty,
+        'type': type,
+        'answers': answers,
+        'pairs': pairs.map((p) => p.toJson()).toList(),
       };
 
-  /// Вариантҳоро омехта мекунад, то ҷавоби дуруст ҳамеша "A" набошад
+  /// Саволи вайроншуда (масалан, дар Firestore) бозиро вайрон накунад
+  bool get isValid {
+    switch (type) {
+      case 'text':
+        return answers.any((a) => a.trim().isNotEmpty);
+      case 'match':
+        return pairs.length >= 2;
+      default:
+        return options.length >= 2 &&
+            correctIndex >= 0 &&
+            correctIndex < options.length;
+    }
+  }
+
+  /// Ҷавоби дуруст ҳамчун матн (барои нишон додан)
+  String get correctAnswerText {
+    switch (type) {
+      case 'text':
+        return answers.isEmpty ? '' : answers.first;
+      case 'match':
+        return pairs.map((p) => '${p.left} → ${p.right}').join('\n');
+      default:
+        return (correctIndex >= 0 && correctIndex < options.length)
+            ? options[correctIndex]
+            : '';
+    }
+  }
+
+  /// Дурустии ҷавоб: 0.0 .. 1.0
+  /// [answer]: int (тест), String (пӯшида), List<int> (мувофиқат;
+  /// барои ҳар тарафи чап индекси тарафи рости интихобшуда)
+  double evaluate(dynamic answer) {
+    switch (type) {
+      case 'text':
+        return (answer is String && isTextCorrect(answer, answers)) ? 1.0 : 0.0;
+      case 'match':
+        if (answer is List && pairs.isNotEmpty) {
+          var ok = 0;
+          for (var i = 0; i < pairs.length; i++) {
+            if (i < answer.length && answer[i] == i) ok++;
+          }
+          return ok / pairs.length;
+        }
+        return 0.0;
+      default:
+        return (answer is num && answer.toInt() == correctIndex) ? 1.0 : 0.0;
+    }
+  }
+
+  /// Вариантҳоро омехта мекунад (танҳо барои тест)
   QuestionModel shuffled([Random? rnd]) {
+    if (type != 'choice') return this;
     if (correctIndex < 0 || correctIndex >= options.length) return this;
     final idx = List<int>.generate(options.length, (i) => i)
       ..shuffle(rnd ?? Random());
@@ -61,17 +147,22 @@ class QuestionModel {
 /// Сабти ҷавоб барои баррасии хатоҳо дар охири бозӣ
 class AnswerRecord {
   final QuestionModel question;
-  final int selected; // -1 = вақт тамом, -2 = гузаронида шуд
+  final int selected; // -1 = вақт тамом, -2 = гузаронида шуд, >=0 = ҷавоб дода шуд
   final int timeMs;
+  final double fraction;
+  final String? given; // ҷавоби корбар ҳамчун матн
 
   AnswerRecord({
     required this.question,
     required this.selected,
     required this.timeMs,
+    this.fraction = 0,
+    this.given,
   });
 
   bool get skipped => selected == -2;
-  bool get correct => selected == question.correctIndex;
+  bool get timedOut => selected == -1;
+  bool get correct => fraction >= 1.0;
 }
 
 class PlayerModel {
@@ -86,6 +177,7 @@ class PlayerModel {
   int bestStreak;
   int correct;
   int lastGain;
+  String result; // none | correct | partial | wrong
 
   PlayerModel({
     required this.uid,
@@ -99,6 +191,7 @@ class PlayerModel {
     this.bestStreak = 0,
     this.correct = 0,
     this.lastGain = 0,
+    this.result = 'none',
   });
 
   factory PlayerModel.fromJson(Map<String, dynamic> json) {
@@ -115,6 +208,7 @@ class PlayerModel {
       bestStreak: n('bestStreak'),
       correct: n('correct'),
       lastGain: n('lastGain'),
+      result: json['result']?.toString() ?? 'none',
     );
   }
 
@@ -130,6 +224,7 @@ class PlayerModel {
         'bestStreak': bestStreak,
         'correct': correct,
         'lastGain': lastGain,
+        'result': result,
       };
 }
 

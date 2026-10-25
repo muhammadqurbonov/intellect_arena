@@ -11,6 +11,7 @@ import '../utils/app_route.dart';
 import '../utils/constants.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/app_button.dart';
+import '../widgets/fx.dart';
 import '../widgets/player_tile.dart';
 import '../widgets/reveal.dart';
 import 'online_game_screen.dart';
@@ -236,11 +237,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                        const BouncingDots(),
                         const SizedBox(width: 10),
                         Text(lang.t('waiting_host')),
                       ],

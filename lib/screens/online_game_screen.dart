@@ -11,7 +11,9 @@ import '../utils/app_route.dart';
 import '../utils/constants.dart';
 import '../utils/helpers.dart';
 import '../widgets/animated_background.dart';
+import '../widgets/answer_inputs.dart';
 import '../widgets/countdown_timer.dart';
+import '../widgets/fx.dart';
 import '../widgets/quiz_widgets.dart';
 import '../widgets/reveal.dart';
 import 'winner_screen.dart';
@@ -51,6 +53,13 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   bool _ready = false;
   bool _finishedHandled = false;
   bool _closedHandled = false;
+  bool _intro = true;
+  int _goodFx = 0;
+  int _badFx = 0;
+  int _milestoneFx = 0;
+  String _fxEmoji = '✅';
+  String _milestoneText = '';
+  int _localStreak = 0;
 
   List<QuestionModel> _questions = [];
   List<PlayerModel> _players = [];
@@ -175,9 +184,13 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
         _scheduleOnce('all-$idx', host ? 700 : 3500, () => _advance(idx, 'question'));
       }
     } else if (phase == 'reveal') {
+      // Ҷавоби дурусти навишташуда/ҷуфтҳоро хондан вақти бештар мегирад
+      final extra = (idx < _questions.length && _questions[idx].type != 'choice')
+          ? 1800
+          : 0;
       _scheduleOnce(
         'rev-$idx',
-        host ? AppConstants.revealMs : AppConstants.revealMs + 2500,
+        (host ? AppConstants.revealMs : AppConstants.revealMs + 2500) + extra,
         () => _advance(idx, 'reveal'),
       );
     }
@@ -187,30 +200,51 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     if (!mounted || _phase != 'question') return;
     final idx = _qIndex;
     if (!_answered) {
-      setState(() => _answered = true);
+      setState(() {
+        _answered = true;
+        _badFx++;
+        _fxEmoji = '⏰';
+        _localStreak = 0;
+      });
       _audio.playWrong();
       _audio.haptic(HapticKind.heavy);
       _db.submitAnswer(
         roomId: widget.roomId,
         expectedIndex: idx,
-        answerIndex: -1,
+        answer: null,
         timeLeftMs: 0,
       );
     }
     _scheduleOnce('time-$idx', widget.isHost ? 500 : 4500, () => _advance(idx, 'question'));
   }
 
-  Future<void> _onAnswer(int i) async {
+  /// Ҷавоб: int (тест), String (пӯшида) ё List<int> (мувофиқат)
+  Future<void> _submit(dynamic answer) async {
     if (_answered || _phase != 'question' || _qIndex < 0) return;
     final q = _questions[_qIndex];
     final left = _timerCtrl.remainingMs;
     final idx = _qIndex;
+    final full = q.evaluate(answer) >= 1.0;
 
     setState(() {
       _answered = true;
-      _selected = i;
+      _selected = answer is int ? answer : null;
+      if (full) {
+        _goodFx++;
+        _fxEmoji = '✅';
+        _localStreak++;
+        if (const [3, 5, 7, 10, 15, 20].contains(_localStreak)) {
+        _milestoneFx++;
+        _milestoneText =
+            '🔥 ${Provider.of<AppLanguage>(context, listen: false).t('streak')} x$_localStreak';
+      }
+      } else {
+        _badFx++;
+        _fxEmoji = '❌';
+        _localStreak = 0;
+      }
     });
-    if (i == q.correctIndex) {
+    if (full) {
       _audio.playCorrect();
       _audio.haptic(HapticKind.light);
     } else {
@@ -221,7 +255,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
     final pts = await _db.submitAnswer(
       roomId: widget.roomId,
       expectedIndex: idx,
-      answerIndex: i,
+      answer: answer,
       timeLeftMs: left,
     );
     if (mounted && idx == _qIndex && pts > 0) {
@@ -235,6 +269,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   void _use5050() {
     if (_answered || _used5050 || _qIndex < 0) return;
     final q = _questions[_qIndex];
+    if (q.type != 'choice') return;
     final wrong = [
       for (int i = 0; i < q.options.length; i++)
         if (i != q.correctIndex) i
@@ -323,20 +358,62 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
   }
 
   // ─── UI ───────────────────────────────────────────────────
+  Widget _buildAnswerArea(QuestionModel q, AppLanguage lang, bool revealing) {
+    final locked = _answered || revealing;
+    if (q.type == 'text') {
+      return TextAnswerInput(
+        key: ValueKey('txt-$_qIndex'),
+        answers: q.answers,
+        locked: locked,
+        hint: lang.t('type_here'),
+        submitLabel: lang.t('submit'),
+        correctLabel: lang.t('correct_answer'),
+        onSubmit: _submit,
+      );
+    }
+    if (q.type == 'match') {
+      return MatchAnswerInput(
+        key: ValueKey('mat-$_qIndex'),
+        pairs: q.pairs,
+        locked: locked,
+        submitLabel: lang.t('submit'),
+        onSubmit: _submit,
+      );
+    }
+    return Column(
+      children: [
+        for (int i = 0; i < q.options.length; i++)
+          OptionTile(
+            key: ValueKey('opt-$_qIndex-$i'),
+            index: i,
+            text: q.options[i],
+            state: _optionState(i, q),
+            onTap: (locked || _eliminated.contains(i)) ? null : () => _submit(i),
+          ),
+      ],
+    );
+  }
+
   Widget _revealBanner(AppLanguage lang, QuestionModel q) {
     final me = _me;
-    final mine = me?.answerIndex ?? -1;
     String text;
     Color color;
-    if (me == null || mine < 0) {
-      text = lang.t('time_up');
-      color = AppColors.warn;
-    } else if (mine == q.correctIndex) {
-      text = '${lang.t('correct')}  +${me.lastGain}';
-      color = AppColors.correct;
-    } else {
-      text = lang.t('wrong');
-      color = AppColors.wrong;
+    switch (me?.result) {
+      case 'correct':
+        text = '${lang.t('correct')}  +${me!.lastGain}';
+        color = AppColors.correct;
+        break;
+      case 'partial':
+        text = '${lang.t('partial')}  +${me!.lastGain}';
+        color = AppColors.warn;
+        break;
+      case 'wrong':
+        text = lang.t('wrong');
+        color = AppColors.wrong;
+        break;
+      default:
+        text = lang.t('time_up');
+        color = AppColors.warn;
     }
     return Reveal(
       key: ValueKey('banner-$_qIndex'),
@@ -356,6 +433,23 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (_intro && _qIndex == 0) {
+      return Scaffold(
+        body: AnimatedBackground(
+          child: Center(
+            child: StartCountdown(
+              readyText: lang.t('get_ready'),
+              goText: lang.t('go'),
+              onStep: () => _audio.haptic(HapticKind.light),
+              onDone: () {
+                if (mounted) setState(() => _intro = false);
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
     final q = _questions[_qIndex];
     final revealing = _phase == 'reveal';
     final me = _me;
@@ -367,6 +461,14 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
       },
       child: Scaffold(
         body: AnimatedBackground(
+          shake: _badFx,
+          overlay: FxLayer(
+            goodTrigger: _goodFx,
+            badTrigger: _badFx,
+            emoji: _fxEmoji,
+            milestoneTrigger: _milestoneFx,
+            milestoneText: _milestoneText,
+          ),
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
@@ -472,20 +574,14 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                             categoryLabel: lang.t('cat_${q.category}'),
                             difficulty: q.difficulty,
                             difficultyLabel: lang.t(q.difficulty),
+                            hint: q.type == 'text'
+                                ? lang.t('hint_text')
+                                : q.type == 'match'
+                                    ? lang.t('hint_match')
+                                    : null,
                           ),
                           const SizedBox(height: 12),
-                          for (int i = 0; i < q.options.length; i++)
-                            OptionTile(
-                              key: ValueKey('opt-$_qIndex-$i'),
-                              index: i,
-                              text: q.options[i],
-                              state: _optionState(i, q),
-                              onTap: (_answered ||
-                                      revealing ||
-                                      _eliminated.contains(i))
-                                  ? null
-                                  : () => _onAnswer(i),
-                            ),
+                          _buildAnswerArea(q, lang, revealing),
                         ],
                       ),
                     ),
@@ -502,12 +598,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    ),
+                                    const BouncingDots(),
                                     const SizedBox(width: 10),
                                     Text(lang.t('waiting_others')),
                                   ],
@@ -515,7 +606,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
                               : LifelineButton(
                                   emoji: '✂️',
                                   label: '50/50',
-                                  enabled: !_used5050,
+                                  enabled: !_used5050 && q.type == 'choice',
                                   onTap: _use5050,
                                 ),
                     ),
