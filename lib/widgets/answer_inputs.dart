@@ -224,7 +224,8 @@ class _MatchAnswerInputState extends State<MatchAnswerInput> {
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         children: [
-          Row(
+          IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -299,6 +300,7 @@ class _MatchAnswerInputState extends State<MatchAnswerInput> {
                 ),
               ),
             ],
+          ),
           ),
           if (locked && !correct)
             Padding(
